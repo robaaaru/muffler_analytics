@@ -18,10 +18,9 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
 
     db.add(db_transaction)
     db.flush()
-    transaction_id =  db_transaction.transaction_id
 
     for a in transaction.orders:
-        db_order = Order(transaction_id = transaction_id, service_id = a.service_id, motor_id = a.motor_id, quantity = a.quantity)
+        db_order = Order(transaction_id = db_transaction.transaction_id, service_id = a.service_id, motor_id = a.motor_id, quantity = a.quantity)
         db.add(db_order)
   
     db.commit()
@@ -34,9 +33,37 @@ def get_transactions(db: Session = Depends(get_db)):
     return db_transactions
 
 @router.get("/transactions/{id}", response_model=TransactionRead)
-def get_transactions(id: int, db: Session = Depends(get_db)):
+def get_transaction(id: int, db: Session = Depends(get_db)):
     db_transaction = db.query(Transaction).filter(Transaction.transaction_id == id).first()
     if db_transaction is None:
         raise HTTPException(status_code=404, detail=f'Transaction {id} does not exist!')
 
     return db_transaction
+
+@router.put("/transactions/{id}", response_model=TransactionRead)
+def update_transaction(id: int, transaction:TransactionCreate, db: Session = Depends(get_db)):
+
+    db_transaction = db.query(Transaction).filter(Transaction.transaction_id == id).first()
+
+    if db_transaction is None:
+        raise HTTPException(status_code=404, detail=f'Transaction {id} does not exist!')
+
+    db_transaction.created_at = transaction.created_at
+    db_transaction.custom_price = transaction.custom_price
+
+    db.query(Order).filter(Order.transaction_id == id).delete()
+
+    transaction_new_total = 0
+    
+    for a in transaction.orders:
+        db_order = Order(transaction_id = db_transaction.transaction_id, service_id = a.service_id, motor_id = a.motor_id, quantity = a.quantity)
+        db.add(db_order)   
+        db_service = db.query(Service).filter(Service.service_id == a.service_id).first()
+        transaction_new_total += a.quantity * db_service.cost
+        
+    db_transaction.total_cost = transaction_new_total
+
+    
+    db.commit()
+    db.refresh(db_transaction)
+    return(db_transaction)
