@@ -70,3 +70,13 @@ def update_transaction(id: int, transaction: TransactionCreate, db: Session = De
     db.commit()
     db.refresh(db_transaction)
     return db_transaction
+
+@router.delete("/transactions/{id}")
+def delete_transaction(id: int, db: Session = Depends(get_db)):
+    query = db.query(Transaction).filter(Transaction.transaction_id == id).first()
+    if query is None:
+        raise HTTPException(status_code=404, detail=f"Transaction {id} doesn't exist!")
+    
+    db.delete(query)
+    db.commit()
+    return "Transaction deleted"
