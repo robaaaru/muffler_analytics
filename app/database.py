@@ -1,22 +1,20 @@
-import psycopg2
 import os
 from dotenv import load_dotenv
-
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 load_dotenv()
 
-def get_connection():
-    return psycopg2.connect(
-        host = os.getenv("DB_HOST"),
-        database = os.getenv("DB_NAME"),
-        user = os.getenv("DB_USER"),
-        password = os.getenv("DB_PASSWORD"),
-        port = os.getenv("DB_PORT")
-    )
+engine = create_engine(url=f"postgresql://{os.getenv("DB_USER")}:{os.getenv("DB_PASSWORD")}@{os.getenv("DB_HOST")}:{os.getenv("DB_PORT")}/{os.getenv("DB_NAME")}")
 
-if __name__ == "__main__":
-    conn = get_connection()
-    print('Connection established')
-    conn.close()
-    
+SessionLocal = sessionmaker(bind=engine, autoflush=False)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 
