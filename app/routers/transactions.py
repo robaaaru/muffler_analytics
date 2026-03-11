@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Transaction, Service, Order
@@ -18,7 +18,6 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
 
     db.add(db_transaction)
     db.flush()
-
     transaction_id =  db_transaction.transaction_id
 
     for a in transaction.orders:
@@ -37,4 +36,7 @@ def get_transactions(db: Session = Depends(get_db)):
 @router.get("/transactions/{id}", response_model=TransactionRead)
 def get_transactions(id: int, db: Session = Depends(get_db)):
     db_transaction = db.query(Transaction).filter(Transaction.transaction_id == id).first()
+    if db_transaction is None:
+        raise HTTPException(status_code=404, detail=f'Transaction {id} does not exist!')
+
     return db_transaction
