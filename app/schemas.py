@@ -14,6 +14,7 @@ class OrderRead(OrderCreate):
 class TransactionCreate(BaseModel):
     custom_price: Optional[float] = None
     orders: List[OrderCreate]
+    created_at: datetime
 
 class TransactionRead(BaseModel):
     transaction_id: int
