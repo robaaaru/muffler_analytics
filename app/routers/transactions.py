@@ -33,3 +33,8 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
 def get_transactions(db: Session = Depends(get_db)):
     db_transactions = db.query(Transaction).all()
     return db_transactions
+
+@router.get("/transactions/{id}", response_model=TransactionRead)
+def get_transactions(id: int, db: Session = Depends(get_db)):
+    db_transaction = db.query(Transaction).filter(Transaction.transaction_id == id).first()
+    return db_transaction
