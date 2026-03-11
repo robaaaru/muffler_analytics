@@ -29,8 +29,7 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
     db.refresh(db_transaction)
     return db_transaction
 
-   
-    
-
-    
-
+@router.get("/transactions", response_model = list[TransactionRead])
+def get_transactions(db: Session = Depends(get_db)):
+    db_transactions = db.query(Transaction).all()
+    return db_transactions
