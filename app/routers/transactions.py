@@ -6,30 +6,29 @@ from app.schemas import TransactionCreate, TransactionRead
 
 router = APIRouter()
 
+def calculate_cost(transaction, db):
+    queried_cost = 0
+    # we have to get the service_id from the transaction.orders for the filter
+    service_ids = list({order_item.service_id for order_item in transaction.orders})
+    # get the whole service table but only filter the service_ids we need
+    services = db.query(Service).filter(Service.service_id.in_(service_ids)).all()
+    # build a dictionary for lookup. the list returned by the services cant have a service_id lookup
+    service_map = {s.service_id : s.cost  for s in services}
+    
+    # we iterate over the list of orders and get the query cost
+    for order_item in transaction.orders:
+        if order_item.service_id not in service_map:
+            raise HTTPException(status_code=404, detail="Service does not exist!")
+        queried_cost += order_item.quantity * service_map[order_item.service_id]
+    
+    return queried_cost
+
+
+
 @router.post("/transactions", response_model=TransactionRead)
 def create_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
-    # calculate the total_cost
-    # loop through orders in the payload. 
-    # query the cost tied to it based on order.service_id == service.service_id. 
-    # compute it using order.quantity and the queried cost.
-    # n+1 query problem because it queries the database per order
-    queried_cost = 0
 
-    service_ids = [order_item.service_id for order_item in transaction.orders]
-    services = db.query(Service).filter(Service.service_id.in_(service_ids)).all()
-    
-    service_map = {}
-
-    for s in services:
-        service_map[s.service_id] = s 
-
-    # continue here
-    
-    for order_item in transaction.orders:
-        costs = db.query(Service).filter(Service.service_id == order_item.service_id).first()
-        if costs is None:
-            raise HTTPException(status_code=404, detail="Service doesn't exist!")
-        queried_cost += order_item.quantity * costs.cost
+    queried_cost = calculate_cost(transaction, db)
 
     #create a row object. similar to values(column = value, column2 = value)
     db_transaction = Transaction(created_at=transaction.created_at, custom_price=transaction.custom_price, total_cost=queried_cost)
@@ -85,18 +84,15 @@ def update_transaction(id: int, transaction: TransactionCreate, db: Session = De
     db_transaction.custom_price = transaction.custom_price
 
     db.query(Order).filter(Order.transaction_id == id).delete()
+    
+    #recalculate the cost
+    queried_cost = calculate_cost(transaction, db)
+    #reinserting orders again
+    orders = [Order(transaction_id=db_transaction.transaction_id, service_id=order_item.service_id, motor_id=order_item.motor_id, quantity=order_item.quantity) for order_item in transaction.orders]
+    
+    db.add_all(orders)    
 
-    transaction_new_total = 0
-
-    for order_item in transaction.orders:
-        db_service = db.query(Service).filter(Service.service_id == order_item.service_id).first()
-        if db_service is None:
-            raise HTTPException(status_code=404, detail="Service doesn't exist!")
-        db_order = Order(transaction_id=db_transaction.transaction_id, service_id=order_item.service_id, motor_id=order_item.motor_id, quantity=order_item.quantity)
-        db.add(db_order)
-        transaction_new_total += order_item.quantity * db_service.cost
-
-    db_transaction.total_cost = transaction_new_total
+    db_transaction.total_cost = queried_cost
 
     db.commit()
     db.refresh(db_transaction)
@@ -107,7 +103,6 @@ def delete_transaction(id: int, db: Session = Depends(get_db)):
     query = db.query(Transaction).filter(Transaction.transaction_id == id).first()
     if query is None:
         raise HTTPException(status_code=404, detail=f"Transaction {id} doesn't exist!")
-    
     db.delete(query)
     db.commit()
-    return "Transaction deleted"
+    return {"message": f"Transaction {id} deleted succesfully"}

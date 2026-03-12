@@ -25,7 +25,7 @@ class Motor(Base):
 class Order(Base):
     __tablename__ = "orders"
     order_id = Column(Integer, primary_key=True)
-    transaction_id = Column(Integer, ForeignKey("transactions.transaction_id"))
+    transaction_id = Column(Integer, ForeignKey("transactions.transaction_id", ondelete="CASCADE"))
     service_id = Column(Integer, ForeignKey("services.service_id"))
     motor_id = Column(Integer, ForeignKey("motors.motor_id"))
     quantity = Column(Integer)
