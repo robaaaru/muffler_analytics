@@ -23,8 +23,6 @@ def calculate_cost(transaction, db):
     
     return queried_cost
 
-
-
 @router.post("/transactions", response_model=TransactionRead)
 def create_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
 
