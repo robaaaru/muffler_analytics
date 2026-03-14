@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.models import Motor
+from app.models import Motor, Order
 from app.schemas import MotorCreate, MotorRead
 from app.database import get_db
 
@@ -41,6 +41,15 @@ def delete_motor(id: int, db: Session = Depends(get_db)):
     db_motor = db.query(Motor).filter(Motor.motor_id == id).first()
     if db_motor is None:
         raise HTTPException(status_code=404, detail=f"Motor {id} doesn't exist!")
+    
+    # check if motor is used in any valid transaction
+    in_use = db.query(Order).filter(Order.motor_id == id, Order.transaction_id.isnot(None)).first()
+    if in_use:
+        raise HTTPException(status_code=400, detail=f"Motor {id} is still used in existing orders and cannot be deleted!")
+    
+    # delete any orphaned orders referencing this motor
+    db.query(Order).filter(Order.motor_id == id, Order.transaction_id.is_(None)).delete()
+
     db.delete(db_motor)
     db.commit()
     return {"message": f"Motor {id} deleted!"}

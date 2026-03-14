@@ -1,35 +1,24 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.models import Transaction, Service, Order
+from app.models import Transaction, Order
 from app.schemas import TransactionCreate, TransactionRead
 
 router = APIRouter()
 
-def calculate_cost(transaction, db):
+def calculate_cost(transaction: TransactionCreate):
     queried_cost = 0
-    # we have to get the service_id from the transaction.orders for the filter
-    service_ids = list({order_item.service_id for order_item in transaction.orders})
-    # get the whole service table but only filter the service_ids we need
-    services = db.query(Service).filter(Service.service_id.in_(service_ids)).all()
-    # build a dictionary for lookup. the list returned by the services cant have a service_id lookup
-    service_map = {s.service_id : s.cost  for s in services}
-    
-    # we iterate over the list of orders and get the query cost
     for order_item in transaction.orders:
-        if order_item.service_id not in service_map:
-            raise HTTPException(status_code=404, detail="Service does not exist!")
-        queried_cost += order_item.quantity * service_map[order_item.service_id]
-    
+        queried_cost += order_item.quantity * order_item.order_cost
     return queried_cost
 
 @router.post("/transactions", response_model=TransactionRead)
 def create_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
-
-    queried_cost = calculate_cost(transaction, db)
+    
+    queried_cost = calculate_cost(transaction)
 
     #create a row object. similar to values(column = value, column2 = value)
-    db_transaction = Transaction(created_at=transaction.created_at, custom_price=transaction.custom_price, total_cost=queried_cost)
+    db_transaction = Transaction(created_at=transaction.created_at, total_cost=queried_cost)
 
     #insert into transactions
     db.add(db_transaction)
@@ -40,7 +29,7 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
 
     #now we can populate the orders table too since we have the transaction_id now
     #list comprehension. creating a list of row object to be added
-    orders = [Order(transaction_id=db_transaction.transaction_id, service_id=order_item.service_id, motor_id=order_item.motor_id, quantity=order_item.quantity)
+    orders = [Order(transaction_id=db_transaction.transaction_id, service_id=order_item.service_id, motor_id=order_item.motor_id, order_cost = order_item.order_cost, quantity=order_item.quantity)
               for order_item in transaction.orders]
     
     #insert into orders
@@ -58,16 +47,22 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
 @router.get("/transactions", response_model=list[TransactionRead])
 def get_transactions(db: Session = Depends(get_db)):
     #query all transactions
-    db_transactions = db.query(Transaction).all()
+    db_transactions = db.query(Transaction).options(
+        joinedload(Transaction.orders).joinedload(Order.service),
+        joinedload(Transaction.orders).joinedload(Order.motor)
+    ).all()
+    
     return db_transactions
 
 @router.get("/transactions/{id}", response_model=TransactionRead)
 def get_transaction(id: int, db: Session = Depends(get_db)):
     #query transactions but filtering transaction_id by id
-    db_transaction = db.query(Transaction).filter(Transaction.transaction_id == id).first()
+    db_transaction = db.query(Transaction).filter(Transaction.transaction_id == id).options(
+        joinedload(Transaction.orders).joinedload(Order.service),
+        joinedload(Transaction.orders).joinedload(Order.motor)
+    ).first()
     if db_transaction is None:
         raise HTTPException(status_code=404, detail=f'Transaction {id} does not exist!')
-
     return db_transaction
 
 @router.put("/transactions/{id}", response_model=TransactionRead)
@@ -79,14 +74,13 @@ def update_transaction(id: int, transaction: TransactionCreate, db: Session = De
         raise HTTPException(status_code=404, detail=f'Transaction {id} does not exist!')
 
     db_transaction.created_at = transaction.created_at
-    db_transaction.custom_price = transaction.custom_price
 
     db.query(Order).filter(Order.transaction_id == id).delete()
     
     #recalculate the cost
-    queried_cost = calculate_cost(transaction, db)
+    queried_cost = calculate_cost(transaction)
     #reinserting orders again
-    orders = [Order(transaction_id=db_transaction.transaction_id, service_id=order_item.service_id, motor_id=order_item.motor_id, quantity=order_item.quantity) for order_item in transaction.orders]
+    orders = [Order(transaction_id=db_transaction.transaction_id, service_id=order_item.service_id, motor_id=order_item.motor_id, order_cost = order_item.order_cost ,quantity=order_item.quantity) for order_item in transaction.orders]
     
     db.add_all(orders)    
 
