@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import Transaction, Order
 from app.schemas import TransactionCreate, TransactionRead
+from datetime import datetime
+from typing import Optional
 
 router = APIRouter()
 
@@ -45,12 +47,23 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
     return db_transaction
 
 @router.get("/transactions", response_model=list[TransactionRead])
-def get_transactions(db: Session = Depends(get_db)):
+def get_transactions(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: Session = Depends(get_db)
+):
     #query all transactions
-    db_transactions = db.query(Transaction).options(
+    query = db.query(Transaction).options(
         joinedload(Transaction.orders).joinedload(Order.service),
         joinedload(Transaction.orders).joinedload(Order.motor)
-    ).all()
+    )
+    
+    if start_date:
+        query = query.filter(Transaction.created_at >= start_date)
+    if end_date:
+        query = query.filter(Transaction.created_at <= end_date)
+        
+    db_transactions = query.all()
     
     return db_transactions
 
