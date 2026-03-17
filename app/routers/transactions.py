@@ -5,8 +5,13 @@ from app.models import Transaction, Order
 from app.schemas import TransactionCreate, TransactionRead
 from datetime import datetime
 from typing import Optional
+from app.auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/transactions",
+    tags=["transactions"],
+    dependencies=[Depends(get_current_user)]
+)
 
 def calculate_cost(transaction: TransactionCreate):
     queried_cost = 0
@@ -14,7 +19,7 @@ def calculate_cost(transaction: TransactionCreate):
         queried_cost += order_item.quantity * order_item.order_cost
     return queried_cost
 
-@router.post("/transactions", response_model=TransactionRead)
+@router.post("", response_model=TransactionRead)
 def create_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
     
     queried_cost = calculate_cost(transaction)
@@ -46,7 +51,7 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
     #return something to the client
     return db_transaction
 
-@router.get("/transactions", response_model=list[TransactionRead])
+@router.get("", response_model=list[TransactionRead])
 def get_transactions(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -67,7 +72,7 @@ def get_transactions(
     
     return db_transactions
 
-@router.get("/transactions/{id}", response_model=TransactionRead)
+@router.get("/{id}", response_model=TransactionRead)
 def get_transaction(id: int, db: Session = Depends(get_db)):
     #query transactions but filtering transaction_id by id
     db_transaction = db.query(Transaction).filter(Transaction.transaction_id == id).options(
@@ -78,7 +83,7 @@ def get_transaction(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f'Transaction {id} does not exist!')
     return db_transaction
 
-@router.put("/transactions/{id}", response_model=TransactionRead)
+@router.put("/{id}", response_model=TransactionRead)
 def update_transaction(id: int, transaction: TransactionCreate, db: Session = Depends(get_db)):
 
     db_transaction = db.query(Transaction).filter(Transaction.transaction_id == id).first()
