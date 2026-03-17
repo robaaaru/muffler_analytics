@@ -3,10 +3,15 @@ from sqlalchemy.orm import Session
 from app.models import Service, Order
 from app.schemas import ServiceCreate, ServiceRead
 from app.database import get_db
+from app.auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/services",
+    tags=["services"],
+    dependencies=[Depends(get_current_user)]
+)
 
-@router.post("/services", response_model=ServiceRead)
+@router.post("", response_model=ServiceRead)
 def create_service(service: ServiceCreate, db : Session = Depends(get_db)):
     
     db_service = Service(service_type = service.service_type, base_price = service.base_price)
@@ -16,20 +21,20 @@ def create_service(service: ServiceCreate, db : Session = Depends(get_db)):
     db.refresh(db_service)
     return db_service
 
-@router.get("/services", response_model=list[ServiceRead])
+@router.get("", response_model=list[ServiceRead])
 def get_services(db : Session = Depends(get_db)):
     db_services = db.query(Service).all()
     return db_services
 
 
-@router.get("/services/{id}", response_model=ServiceRead)
+@router.get("/{id}", response_model=ServiceRead)
 def get_service(id: int, db : Session = Depends(get_db)):
     db_service = db.query(Service).filter(Service.service_id == id).first()
     if db_service is None:
         raise HTTPException(status_code=404, detail=f"Service {id} doesn't exist!")
     return db_service
 
-@router.put("/services/{id}", response_model=ServiceRead)
+@router.put("/{id}", response_model=ServiceRead)
 def update_service(id: int, service: ServiceCreate, db: Session = Depends(get_db)):
     db_service = db.query(Service).filter(Service.service_id == id).first()
     if db_service is None:
@@ -41,7 +46,7 @@ def update_service(id: int, service: ServiceCreate, db: Session = Depends(get_db
     db.refresh(db_service)
     return db_service
     
-@router.delete("/services/{id}")
+@router.delete("/{id}")
 def delete_service(id: int, db: Session = Depends(get_db)):
     db_service = db.query(Service).filter(Service.service_id == id).first()
     if db_service is None:
