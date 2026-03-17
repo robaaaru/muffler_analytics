@@ -103,7 +103,7 @@ def update_transaction(id: int, transaction: TransactionCreate, db: Session = De
     db.refresh(db_transaction)
     return db_transaction
 
-@router.delete("/transactions/{id}")
+@router.delete("/{id}")
 def delete_transaction(id: int, db: Session = Depends(get_db)):
     query = db.query(Transaction).filter(Transaction.transaction_id == id).first()
     if query is None:
